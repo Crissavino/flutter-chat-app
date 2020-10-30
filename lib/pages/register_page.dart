@@ -1,9 +1,12 @@
+import 'package:chat_app/helpers/mostrar_alerta.dart';
+import 'package:chat_app/services/auth_service.dart';
 import 'package:chat_app/widget/boton_azul.dart';
 import 'package:chat_app/widget/custom_input.dart';
 import 'package:chat_app/widget/labels.dart';
 import 'package:chat_app/widget/logo.dart';
 import 'package:chat_app/widget/terms.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class RegisterPage extends StatelessWidget {
   @override
@@ -49,6 +52,8 @@ class __FormState extends State<_Form> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: 50.0,
@@ -75,10 +80,25 @@ class __FormState extends State<_Form> {
           ),
           BotonAzul(
             btnLabel: 'Ingrese',
-            onPressed: () {
-              print(emailController.text);
-              print(passController.text);
-            },
+            onPressed: authService.autenticando
+                ? null
+                : () async {
+                    FocusScope.of(context).unfocus();
+                    final registerOk = await authService.register(
+                      nameController.text.trim(),
+                      emailController.text.trim(),
+                      passController.text.trim(),
+                    );
+
+                    if (registerOk == true) {
+                      // TODO conectar a socket server
+                      Navigator.pushReplacementNamed(context, 'usuarios');
+                    } else {
+                      // mostrar alerta
+                      mostrarAlerta(context, 'Registro incorrecto',
+                          'Sus credenciales no son validas');
+                    }
+                  },
           ),
         ],
       ),
