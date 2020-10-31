@@ -1,8 +1,13 @@
 import 'dart:io';
 
+import 'package:chat_app/models/mensaje.dart';
+import 'package:chat_app/services/auth_service.dart';
+import 'package:chat_app/services/chat_service.dart';
+import 'package:chat_app/services/socket_service.dart';
 import 'package:chat_app/widget/chat_message.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class ChatPage extends StatefulWidget {
   @override
@@ -13,10 +18,66 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _estaEscribiendo = false;
+  ChatService chatService;
+  SocketService socketService;
+  AuthService authService;
 
   List<ChatMessage> _messages = [];
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    this.chatService = Provider.of<ChatService>(context, listen: false);
+    this.socketService = Provider.of<SocketService>(context, listen: false);
+    this.authService = Provider.of<AuthService>(context, listen: false);
+
+    this.socketService.socket.on('mensaje-personal', _escucharMensaje);
+
+    _cargarHistorial(this.chatService.usuarioPara.uuid);
+  }
+
+  void _cargarHistorial(String uuid) async {
+    List<Mensaje> chat = await this.chatService.getChat(uuid);
+    final history = chat.map(
+      (m) => ChatMessage(
+        texto: m.mensaje,
+        uuid: m.de,
+        animationController: AnimationController(
+          vsync: this,
+          duration: Duration(
+            milliseconds: 0,
+          ),
+        )..forward(),
+      ),
+    );
+
+    setState(() {
+      _messages.insertAll(0, history);
+    });
+  }
+
+  void _escucharMensaje(dynamic payload) {
+    ChatMessage message = ChatMessage(
+      texto: payload['mensaje'],
+      uuid: payload['de'],
+      animationController: AnimationController(
+        vsync: this,
+        duration: Duration(
+          milliseconds: 400,
+        ),
+      ),
+    );
+
+    setState(() {
+      _messages.insert(0, message);
+    });
+
+    message.animationController.forward();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final usuarioPara = this.chatService.usuarioPara;
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -26,7 +87,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
           children: [
             CircleAvatar(
               child: Text(
-                'Te',
+                usuarioPara.nombre.substring(0, 2),
                 style: TextStyle(fontSize: 12.0),
               ),
               backgroundColor: Colors.blue[100],
@@ -36,7 +97,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
               height: 3.0,
             ),
             Text(
-              'Pepe',
+              usuarioPara.nombre,
               style: TextStyle(
                 color: Colors.black87,
                 fontSize: 12.0,
@@ -139,7 +200,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       return;
     }
     final newMessage = ChatMessage(
-      uuid: '123',
+      uuid: this.authService.usuario.uuid,
       texto: texto,
       animationController: AnimationController(
         vsync: this,
@@ -150,23 +211,27 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     // desp de insertar el mensaje disparo la animacion
     newMessage.animationController.forward();
 
-    print(texto);
     _focusNode.requestFocus();
     _textController.clear();
 
     setState(() {
       _estaEscribiendo = false;
     });
+
+    this.socketService.socket.emit('mensaje-personal', {
+      'de': this.authService.usuario.uuid,
+      'para': this.chatService.usuarioPara.uuid,
+      'mensaje': texto
+    });
   }
 
   @override
   void dispose() {
-    // TODO: off del socket
-
     for (ChatMessage message in _messages) {
       message.animationController.dispose();
     }
     _textController.dispose();
+    this.socketService.socket.off('mensaje-personal');
     super.dispose();
   }
 }
